@@ -15,8 +15,35 @@ sub new {
   my ($class, %params) = @_;
 
   my $self = +{
-    plugins => array(@{ $params{plugins} || [] }),
+    # Simplistic plugins; constructor 'plugins =>' parameter is an ARRAY of
+    # plugin objects:
+    plugins  => array(@{ $params{plugins} || [] }),
+
+    # 'nick =>' is the desired IRC nickname as a string:
+    nick     => ($params{nick} || die "Expected 'nick =>'"),
+
+    # 'server =>' is an IRC server as a string:
+    server   => ($params{server} || die "Expected 'server =>'"),
+
+    # 'channels =>' is an ARRAY of channels to join:
+    channels => array(@{ $params{channels} || die "Expected 'channels =>'" }),
+
+    # We want a JSON that can handle ->TO_JSON for objects:
+    _json    => JSON::MaybeXS->new(
+      allow_nonref => 1, convert_blessed => 1, utf8 => 1
+    ),
+
+    # Store a POEx::ZMQ instance for spawning shared-context sockets later:
+    _zmq     => POEx::ZMQ->new,
+    _msgid   => 0,
+
   };
+
+  # DEALER will talk to IRC::Publisher's ROUTER command interface:
+  $self->{_zdealer} = $self->{_zmq}->socket(type => ZMQ_DEALER);
+  # SUB will listen for IRC events from IRC::Publisher:
+  $self->{_zsub} = $self->{_zmq}->socket(type => ZMQ_SUB);
+
   bless $self, $class;
 
   POE::Session->create(
