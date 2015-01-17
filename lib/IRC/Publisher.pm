@@ -193,16 +193,22 @@ sub _ircsock_input {
 }
 
 sub _ircsock_open {
-  # FIXME get our tagged alias from $conn->args->{tag},
-  #  save to _alias
+  my ($kernel, $self) = @_[KERNEL, OBJECT];
+  my $conn = $_[ARG0];
+  my $alias = $conn->args->{tag}
+    || confess "BUG - Connect obj is missing alias tag";
+  
+  $self->_alias->set($alias => $conn);
+
+  $self->publish( ircstatus => connected => $alias );
 }
 
 sub _ircsock_failed {
-  # FIXME delete our alias 
+  # FIXME delete our alias if present
 }
 
 sub _ircsock_disconnect {
-  # FIXME delete our alias
+  # FIXME delete our alias if present
 }
 
 
