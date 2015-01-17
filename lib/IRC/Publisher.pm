@@ -54,7 +54,7 @@ has irc => (
 has json => (
   lazy        => 1,
   is          => 'ro',
-  isa         => HandlesMethods[qw/new encode/],
+  isa         => HasMethods[qw/new encode/],
   builder     => sub {
     JSON::MaybeXS->new(
       utf8            => 1,
