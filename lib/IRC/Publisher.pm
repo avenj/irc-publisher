@@ -299,7 +299,7 @@ sub _cmd_aliases {
 
 sub _cmd_ping {
   my ($self, $id) = @_;
-  +{ code => 200, msg => 'pong', $id }
+  +{ code => 200, msg => 'PONG', $id }
 }
 
 
