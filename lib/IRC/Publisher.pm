@@ -138,7 +138,10 @@ sub _start {
 }
 
 sub stop {
-  # FIXME ->disconnect & shut down emitters
+  my ($self) = @_;
+  $poe_kernel->post( $self->irc->session_id => 'shutdown' );
+  $self->zmq_sock_pub->stop;
+  $self->zmq_sock_router->stop;
 }
 
 sub publish {
@@ -205,18 +208,26 @@ sub _ircsock_open {
   my $conn = $_[ARG0];
   my $alias = $conn->args->{tag}
     || confess "BUG - Connect obj is missing alias tag";
-  
   $self->_alias->set($alias => $conn);
-
   $self->publish( ircstatus => connected => $alias );
 }
 
 sub _ircsock_failed {
-  # FIXME delete our alias if present
+  my ($kernel, $self) = @_[KERNEL, OBJECT];
+  my ($connector, $op, $errno, $errstr) = @_[ARG0 .. $#_];
+  my $alias = $connector->args->{tag}
+    || confess "BUG - Connector obj is missing alias tag";
+  $self->_alias->delete($alias);
+  $self->publish( ircstatus => failed => $alias, $op, $errno, $errstr );
 }
 
 sub _ircsock_disconnect {
-  # FIXME delete our alias if present
+  my ($kernel, $self) = @_[KERNEL, OBJECT];
+  my $conn = $_[ARG0];
+  my $alias = $conn->args->{tag}
+    || confess "BUG - Connector obj is missing alias tag";
+  $self->_alias->delete($alias);
+  $self->publish( ircstatus => disconnected => $alias );
 }
 
 

@@ -1,0 +1,21 @@
+#!perl
+
+use Getopt::Long;
+my @pub;
+my @rtr;
+GetOptions(
+  'publish=s' => \@pub,
+  'listen=s'  => \@rtr,
+);
+@pub = split /,/, join ',', @pub;
+@rtr = split /,/, join ',', @rtr;
+
+use POE;
+use IRC::Publisher;
+
+my $publisher = IRC::Publisher->new(
+  publish_on => [ @pub ],  
+  listen_on  => [ @rtr ],
+);
+
+POE::Kernel->run
