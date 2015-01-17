@@ -177,10 +177,10 @@ sub disconnect {
 sub send {
   my ($self, $alias, $ircmsg) = @_;
 
-  # FIXME
+  my $conn = $self->_alias->get($alias)
+    || confess "No such alias '$alias'";
+  $self->irc->send($ircmsg, $conn);
 }
-
-
 
 
 sub _ircsock_input {
