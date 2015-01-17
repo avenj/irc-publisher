@@ -250,9 +250,12 @@ sub _zrtr_recv_multipart {
   my $meth = '_cmd_' . lc($cmd // 'bad_input');
   my $output = try {
     my $params = $json ? $self->json->decode($json) : +{};
+    die [404 => 'Command not handled'] unless $self->can($meth);
     $self->$meth($id, $params)
   } catch {
-    +{ code => 500, msg => "$_", id => $id }
+    ref $_ eq 'ARRAY' ? 
+      +{ code => $_->[0], msg => $_->[1], id => $id }
+      : +{ code => 500, msg => "$_", id => $id }
   };
 
   if ($output) {
