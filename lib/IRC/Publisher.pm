@@ -1,4 +1,4 @@
-package IRC::Publisher::Publisher;
+package IRC::Publisher;
 
 use Carp;
 use strictures 1;

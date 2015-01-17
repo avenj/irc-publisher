@@ -10,6 +10,9 @@ GetOptions(
 @pub = split /,/, join ',', @pub;
 @rtr = split /,/, join ',', @rtr;
 
+die "Expected '--publish'" unless @pub;
+die "Expected '--listen'" unless @rtr;
+
 use POE;
 use IRC::Publisher;
 
