@@ -2,9 +2,10 @@
 
 use strictures 1;
 
+# A simplistic plugin dispatch system for use with an IRC::Publisher:
 package My::PluginPlatform;
 
-use JSON::MaybeXS 'decode_json';
+use JSON::MaybeXS;
 use IRC::Message::Object 'ircmsg';
 use List::Objects::WithUtils;
 
@@ -52,6 +53,8 @@ sub new {
         _start
         _zdealer_recv_multipart
         _zpub_recv_multipart
+
+        send_irc_connect
       / ],
     ],
   );
@@ -59,38 +62,82 @@ sub new {
   $self
 }
 
-sub plugins {
-  my ($self) = @_;
-  $self->{plugins}
-}
+# Some basic accessors:
+sub plugins  { shift->{plugins} }
+sub nick     { shift->{nick} }
+sub channels { shift->{channels} }
+sub server   { shift->{server} }
+
+sub _json    { shift->{_json} }
+sub _zdealer { shift->{_zdealer} }
+sub _zsub    { shift->{_zsub} }
 
 sub send_to_irc {
   my ($self, $ircmsg) = @_;
-  # FIXME SEND cmd on DEALER
+  # Message IDs are for your application's purpose and need not be globally
+  # unique; that is, the IRC::Publisher has no interest in these except to tag
+  # replies. We just use our message's refaddr, which is braindead but simple
+  # enough:
+  my $msgid = $ircmsg + 0;
+
+  # An IRC::Message::Object provides ->TO_JSON:
+  my $json = $self->_json->encode($ircmsg);
+
+  # Our DEALER sends:
+  #  empty routing delimiter,
+  #  arbitrary message ID,
+  #  command,
+  #  JSON
+  $self->_zdealer->send_multipart(
+    '', $msgid, send => $json 
+  );
 }
 
 sub _start {
+  my ($kernel, $self) = @_[KERNEL, OBJECT];
   # FIXME set up / start sockets
+  #  connect
+  #  subscribe to ''
   # FIXME start ping timer
+  # FIXME delay in case of slow subscriber, then
+  #       issue IRC connect + send JOIN when we get _001 in recv
+}
+
+sub send_irc_connect {
+  my $self = $_[OBJECT];
+
+  my $msgid = $self + 0;
+
+  my $json = $self->_json->encode(
+    +{ alias => 'irc', addr => $self->server }
+  );
+
+  $self->_zdealer->send_multipart(
+    '', $msgid, connect => $json
+  );
 }
 
 sub _zdealer_recv_multipart {
+  my $self  = $_[OBJECT];
   my $parts = $_[ARG0];
+  # Extract message envelope & body:
   my $envelope  = $parts->items_before(sub { ! length });
   my $body      = $parts->items_after(sub { ! length });
   my $json      = $body->get(0);
-
-  # FIXME these should be command ACKs 
+  my $response  = $self->_json->decode($json);
+  # FIXME these should be command ACKs or a pong
 }
 
 sub _zpub_recv_multipart {
+  my $self  = $_[OBJECT];
   my $parts = $_[ARG0];
   
   # Publisher sends [ $type, @params ]:
   my $type = shift;
   
   if ($type eq 'ircstatus') {
-    # Just print 'ircstatus' messages:
+    # FIXME if ircstatus is 'connected', send registration
+    # FIXME if connector failure, quit
     warn "ircstatus: ".$parts->join(' => ');
     return
   }
@@ -99,8 +146,10 @@ sub _zpub_recv_multipart {
     # Fetch our JSON-ified IRC message:
     my $json    = $parts->get(0);
     # Then turn it back into a blessed IRC::Message::Object:
-    my $data    = decode_json($json);
+    my $data    = $self->_json->decode($json);
     my $ircmsg  = ircmsg(%$data);
+
+    # FIXME if command is 001, issue JOIN and skip plugin dispatch
 
     # Trivial "plugin" dispatch via List::Objects::WithUtils;
     # visit each object in ->plugins and dispatch to '_cmd_foo' or '_default':
@@ -119,17 +168,28 @@ sub _zpub_recv_multipart {
   }
 }
 
-
-
+# A plugin that responds to greetings:
 package My::Plugin::Hello;
+
+sub new { bless [], shift }
 
 sub _cmd_privmsg {
   my ($self, $ircmsg) = @_;
-  # FIXME reply to 'hello' or 'hi' by returning new ircmsg
+  my $prefix = substr $ircmsg->params->[0], 0, 1;
+  if (grep {; $_ eq $prefix } '#', '&', '+') {
+    return ircmsg(
+      command => 'privmsg',
+      params  => [ $ircmsg->params->[0], "hello there!" ]
+    ) if $ircmsg->params->[1] =~ /^(hi|hello)/;
+  }
+  ()
 }
 
 
+# A plugin that shows incoming raw lines:
 package My::Plugin::ShowRawLines;
+
+sub new { bless [], shift }
 
 sub _default {
   my ($self, $ircmsg) = @_;
@@ -137,10 +197,12 @@ sub _default {
   ()
 }
 
+
+# Construct and run our PluginPlatform:
 package main;
-
-# FIXME construct PluginPlatform w/ Hello + ShowRawLines plugins
-
+my $platform = My::PluginPlatform->new(
+  plugins => [ My::Plugin::Hello->new, My::Plugin::ShowRawLines->new ],
+);
 POE::Kernel->run
 # FIXME
 #  - spawn session
