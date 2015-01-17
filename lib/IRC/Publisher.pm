@@ -134,7 +134,8 @@ sub _start {
   $self->zmq_sock_pub->start;
   $self->zmq_sock_router->start;
 
-  # FIXME set up relevant ROUTER / PUB binds
+  $self->publish_on->visit(sub { $self->zmq_sock_pub->bind($_) });
+  $self->listen_on->visit(sub { $self->zmq_sock_router->bind($_) });
 }
 
 sub stop {
