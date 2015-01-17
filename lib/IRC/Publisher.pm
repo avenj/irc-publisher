@@ -196,10 +196,19 @@ sub send {
 
 sub _ircsock_input {
   my ($kernel, $self) = @_[KERNEL, OBJECT];
-  my $msg = $_[ARG1];
+  my ($conn, $msg) = @_[ARG0 .. $#_];
 
-  # FIXME if ->handle_ping (default 1),
-  #  handle ping-pong dialog, throw these away
+  if (lc $msg->command eq 'ping' && $self->handle_ping) {
+    $self->send(
+      ircmsg(
+        command => 'pong',
+        params  => [ @{ $msg->params } ],
+      ),
+      $conn
+    );
+    return
+  }
+
   $self->publish( ircmsg => $self->json->encode($msg) );
 }
 
@@ -284,7 +293,6 @@ sub _cmd_send {
 sub _cmd_aliases {
   my ($self, $id) = @_;
   +{ code => 200, msg => $self->_alias->keys->join(' '), id => $id }
-  # FIXME
 }
 
 
