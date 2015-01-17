@@ -146,15 +146,22 @@ sub publish {
   $self->zmq_sock_pub->send_multipart( $prefix, @parts );
 }
 
+sub aliases {
+  my ($self) = @_;
+  $self->_alias->keys->all
+}
 
 sub connect {
   my ($self, %params) = @_;
 
   my @required = qw/alias addr/;
   for (@required) {
-    confess "Missing required parameter '$_'"
+    croak "Missing required parameter '$_'"
       unless defined $params{$_}
   }
+
+  croak 'Alias must be in the [A-Za-z0-9_-] set'
+    unless $params{alias} =~ /^[A-Za-z0-9_-]$/;
   
   $self->backend->create_connector(
     tag => $params{alias},
@@ -259,6 +266,8 @@ sub _cmd_send {
 }
 
 sub _cmd_aliases {
+  my ($self, $id) = @_;
+  +{ code => 200, msg => $self->_alias->keys->join(' '), id => $id }
   # FIXME
 }
 
