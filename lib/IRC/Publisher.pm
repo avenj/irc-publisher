@@ -177,7 +177,9 @@ sub connect {
 sub disconnect {
   my ($self, $alias) = @_;
 
-  # FIXME
+  my $conn = $self->_alias->get($alias)
+    || confess "No such alias '$alias'";
+  $self->irc->disconnect($conn->wheel_id, 'Disconnecting');
 }
 
 sub send {
@@ -254,7 +256,10 @@ sub _cmd_connect {
 }
 
 sub _cmd_disconnect {
-  # FIXME
+  my ($self, $id, $params) = @_;
+  my $alias = delete $params->{alias} // die "Missing required param 'alias'";
+  $self->disconnect($alias);
+  +{ code => 200, msg => "ACK DISCONNECT", id => $id }
 }
 
 sub _cmd_send {
