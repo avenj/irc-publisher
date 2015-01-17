@@ -6,6 +6,18 @@ my @rtr;
 GetOptions(
   'publish=s' => \@pub,
   'listen=s'  => \@rtr,
+
+  help => sub {
+    print "$0\n\n",
+      " Endpoints:\n",
+      "  --publisher=ADDR     ZeroMQ PUB endpoint (publisher)\n",
+      "  --listen=ADDR        ZeroMQ ROUTER endpoint (command interface)\n",
+      " (Specify multiple times to bind multiple endpoints.)\n",
+      "\n",
+    ;
+
+    exit 0
+  },
 );
 @pub = split /,/, join ',', @pub;
 @rtr = split /,/, join ',', @rtr;
