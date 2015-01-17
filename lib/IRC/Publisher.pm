@@ -109,7 +109,6 @@ has zmq_sock_router => (
 
 sub BUILD {
   my ($self) = @_;
-  # FIXME set up session
   POE::Session->create(
     object_states => [
       $self => [ qw/
@@ -220,7 +219,7 @@ sub _zrtr_recv_multipart {
 
   my ($id, $cmd, $json) = $body->all;
 
-  my $meth = '_cmd_' . lc($cmd);
+  my $meth = '_cmd_' . lc($cmd // 'bad_input');
   my $output = try {
     my $params = $json ? $self->json->decode($json) : +{};
     $self->$meth($id, $params)
@@ -236,28 +235,31 @@ sub _zrtr_recv_multipart {
   }
 }
 
+sub _cmd_bad_input {
+  my ($self, $maybe_id) = @_;
+  +{ code => 500, msg => "Invalid message format", id => $maybe_id // 0 }
+}
+
 sub _cmd_connect {
   my ($self, $id, $params) = @_;
-  my $id = delete $params->{msgid} || 0;
   $self->connect(%$params);
   +{ code => 200, msg => "ACK CONNECT", id => $id }
 }
 
 sub _cmd_disconnect {
-
+  # FIXME
 }
 
 sub _cmd_send {
   my ($self, $id, $params) = @_;
   my $alias = delete $params->{alias} // die "Missing required param 'alias'";
-  my $id = delete $params->{msgid} || 0;
   my $ircmsg = ircmsg(%$params);
   $self->send($alias => $ircmsg);
   +{ code => 200, msg => "ACK SEND", id => $id }
 }
 
 sub _cmd_aliases {
-
+  # FIXME
 }
 
 
