@@ -157,8 +157,7 @@ sub aliases {
 sub connect {
   my ($self, %params) = @_;
 
-  my @required = qw/alias addr/;
-  for (@required) {
+  for (qw/alias addr/) {
     croak "Missing required parameter '$_'"
       unless defined $params{$_}
   }
@@ -295,5 +294,78 @@ sub _cmd_aliases {
   +{ code => 200, msg => $self->_alias->keys->join(' '), id => $id }
 }
 
+sub _cmd_ping {
+  my ($self, $id) = @_;
+  +{ code => 200, msg => 'pong', $id }
+}
+
 
 1;
+
+=pod
+
+=head1 NAME
+
+IRC::Publisher - Bridge IRC and ZeroMQ to build extensible clients or servers
+
+=head1 SYNOPSIS
+
+FIXME
+
+=head1 DESCRIPTION
+
+=head2 PUBLISHED EVENTS
+
+=head3 ircmsg
+
+=head3 ircstatus
+
+=head2 ATTRIBUTES
+
+=head3 publish_on
+
+=head3 listen_on
+
+=head3 handle_ping
+
+=head3 irc
+
+=head3 json
+
+=head3 zmq
+
+=head3 zmq_sock_pub
+
+=head3 zmq_sock_router
+
+=head2 METHODS
+
+=head3 stop
+
+=head3 aliases
+
+=head3 connect
+
+=head3 disconnect
+
+=head3 publish
+
+=head3 send
+
+=head2 REMOTE COMMAND INTERFACE
+
+=head3 aliases
+
+=head3 connect
+
+=head3 disconnect
+
+=head3 send
+
+=head3 ping
+
+=head1 AUTHOR
+
+Jon Portnoy <avenj@cobaltirc.org>
+
+=cut
