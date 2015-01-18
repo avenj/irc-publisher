@@ -18,25 +18,31 @@ sub new {
   my $self = +{
     # Simplistic plugins; constructor 'plugins =>' parameter is an ARRAY of
     # plugin objects:
-    plugins  => array(@{ $params{plugins} || [] }),
+    plugins   => array(@{ $params{plugins} || [] }),
+
+    # 'publisher =>' is the IRC::Publisher's PUB endpoint:
+    publisher => ($params{publisher} || die "Expected 'publisher =>'"),
+
+    # 'remote =>' is the IRC::Publisher's ROUTER endpoint:
+    remote    => ($params{remote} || die "Expected 'remote =>'"),
 
     # 'nick =>' is the desired IRC nickname as a string:
-    nick     => ($params{nick} || die "Expected 'nick =>'"),
+    nick      => ($params{nick} || die "Expected 'nick =>'"),
 
     # 'server =>' is an IRC server as a string:
-    server   => ($params{server} || die "Expected 'server =>'"),
+    server    => ($params{server} || die "Expected 'server =>'"),
 
     # 'channels =>' is an ARRAY of channels to join:
-    channels => array(@{ $params{channels} || die "Expected 'channels =>'" }),
+    channels  => array(@{ $params{channels} || die "Expected 'channels =>'" }),
 
     # We want a JSON that can handle ->TO_JSON for objects:
-    _json    => JSON::MaybeXS->new(
+    _json     => JSON::MaybeXS->new(
       allow_nonref => 1, convert_blessed => 1, utf8 => 1
     ),
 
     # Store a POEx::ZMQ instance for spawning shared-context sockets later:
-    _zmq     => POEx::ZMQ->new,
-    _msgid   => 0,
+    _zmq      => POEx::ZMQ->new,
+    _msgid    => 0,
 
   };
 
@@ -55,6 +61,7 @@ sub new {
         _zpub_recv_multipart
 
         send_irc_connect
+        ping
       / ],
     ],
   );
@@ -63,6 +70,8 @@ sub new {
 }
 
 # Some basic accessors:
+sub publisher { shift->{publisher} }
+sub remote   { shift->{remote} }
 sub plugins  { shift->{plugins} }
 sub nick     { shift->{nick} }
 sub channels { shift->{channels} }
@@ -95,12 +104,15 @@ sub send_to_irc {
 
 sub _start {
   my ($kernel, $self) = @_[KERNEL, OBJECT];
-  # FIXME set up / start sockets
-  #  connect
-  #  subscribe to ''
-  # FIXME start ping timer
-  # FIXME delay in case of slow subscriber, then
-  #       issue IRC connect + send JOIN when we get _001 in recv
+  #  Connect to configured PUB & DEALER:
+  $self->_zsub->connect( $self->publisher );
+  $self->_zdealer->connect( $self->remote );
+  # Subscribe to all messages from PUB:
+  $self->_zsub->set_socket_opt(ZMQ_SUBSCRIBE, '');
+  # Delay in case subscribing is slow, then we'll issue our commands:
+  $kernel->delay( send_irc_connect => 1 );
+  # Start ping timer; we'll reset it whenever we have traffic:
+  $kernel->delay( ping => 60 );
 }
 
 sub send_irc_connect {
@@ -117,15 +129,48 @@ sub send_irc_connect {
   );
 }
 
+sub ping {
+  my ($kernel, $self) = @_[KERNEL, OBJECT];
+  my $msgid = time;
+  if ($self->{_ping_pending}) {
+    # Still waiting on a reply on our last ping; timeout.
+    warn "Ping timeout on remote ROUTER, exiting";
+    # A real app would probably try to recreate the socket;
+    # we just quit:
+    $self->stop;
+  }
+
+  $self->{_ping_pending} = 1;
+
+  $self->_zdealer->send_multipart(
+    '', $msgid, 'ping' 
+  );
+
+  $kernel->delay( ping => 60 );
+}
+
 sub _zdealer_recv_multipart {
-  my $self  = $_[OBJECT];
+  my ($kernel, $self) = @_[KERNEL, OBJECT];
   my $parts = $_[ARG0];
-  # Extract message envelope & body:
+
+  # We have traffic, so we can reset our ping timeout:
+  $kernel->delay( ping => 60 );
+
+  # Extract message envelope & body, decode JSON:
   my $envelope  = $parts->items_before(sub { ! length });
   my $body      = $parts->items_after(sub { ! length });
   my $json      = $body->get(0);
   my $response  = $self->_json->decode($json);
+
+  if ($response->{code} == 500) {
+    # FIXME received error from Publisher
+  }
+
   # FIXME these should be command ACKs or a pong
+  #  on pong, decrement $self->{_ping_pending}
+  if ($response->{msg} eq 'PONG') {
+    $self->{_ping_pending} = 0;
+  }
 }
 
 sub _zpub_recv_multipart {
@@ -133,13 +178,19 @@ sub _zpub_recv_multipart {
   my $parts = $_[ARG0];
   
   # Publisher sends [ $type, @params ]:
-  my $type = shift;
+  my $type = $parts->shift;
   
   if ($type eq 'ircstatus') {
-    # FIXME if ircstatus is 'connected', send registration
-    # FIXME if connector failure, quit
-    warn "ircstatus: ".$parts->join(' => ');
-    return
+    my $event = $parts->shift;
+    if ($event eq 'connected') {
+      # Send registration:
+      # FIXME
+      return
+    }
+    if ($event eq 'failed' || $event eq 'disconnected') {
+      die "IRC quit: $event => ".$parts->join(', ')."\n"
+    }
+    warn "ircstatus: $event => ".$parts->join(', ')."\n";
   }
 
   if ($type eq 'ircmsg') {
@@ -149,7 +200,15 @@ sub _zpub_recv_multipart {
     my $data    = $self->_json->decode($json);
     my $ircmsg  = ircmsg(%$data);
 
-    # FIXME if command is 001, issue JOIN and skip plugin dispatch
+    if ($ircmsg->command eq '001') {
+      # If this is a 001 numeric, send our JOINs:
+      $self->channels->visit(sub {
+        $self->send_to_irc(
+          ircmsg( command => 'join', params => [ $_ ] )
+        )
+      });
+      return
+    }
 
     # Trivial "plugin" dispatch via List::Objects::WithUtils;
     # visit each object in ->plugins and dispatch to '_cmd_foo' or '_default':
@@ -200,21 +259,20 @@ sub _default {
 
 # Construct and run our PluginPlatform:
 package main;
+
+use Getopt::Long;
+GetOptions(
+  # FIXME
+  #  nick
+  #  server
+  #  channels
+  #  remote
+  #  publisher
+);
+
 my $platform = My::PluginPlatform->new(
   plugins => [ My::Plugin::Hello->new, My::Plugin::ShowRawLines->new ],
+  # FIXME args from GetOptions
 );
+
 POE::Kernel->run
-# FIXME
-#  - spawn session
-#  - SUB to specified --publisher
-#  - DEALER to specified --server
-#  - start PING timer
-#    - reset timer on incoming traffic
-#    - send [ID, PING] via DEALER when timer fires
-#    - if timer fires but still $_[HEAP]->waiting_on_pong,
-#      die for ping timeout
-#  - send CONNECT for specified --server
-#  - send JOIN for specified --channel(s)
-#  - display incoming 'ircstatus' msgs
-#  - dispatch incoming 'ircmsg' events to plugin pipeline
-#  - provide a 'HelloWorld' and 'ShowRawLines' plugin inline
