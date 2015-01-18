@@ -45,7 +45,13 @@ has listen_on => (
   builder     => sub { [] },
 );
 
-has handle_ping => (
+has publisher_ping_delay => (
+  is          => 'ro',
+  isa         => StrictNum,
+  builder     => sub { 30 },
+);
+
+has handle_irc_ping => (
   is          => 'ro',
   isa         => Bool,
   builder     => sub { 1 },
@@ -124,6 +130,8 @@ sub BUILD {
         _start
         _stop
         _session_cleanup
+        _zpub_ping
+        _zpub_reset_timer
         _zrtr_recv_multipart
       / ],
       $self => +{
@@ -146,6 +154,9 @@ sub _start {
   $self->zmq_sock_pub->start;
   $self->zmq_sock_router->start;
 
+  # FIXME set up a recurring 'PING' published whenever PUB is quiet
+  # for more than $self->publisher_ping_delay
+  # reset the delay in ->publish
   $self->publish_on->visit(sub { $self->zmq_sock_pub->bind($_) });
   $self->listen_on->visit(sub { $self->zmq_sock_router->bind($_) });
 }
@@ -168,9 +179,21 @@ sub _session_cleanup {
   $kernel->alarm_remove_all;
 }
 
+sub _zpub_ping {
+  my ($kernel, $self) = @_[KERNEL, OBJECT];
+  $self->publish( ping => time );
+  $kernel->delay( _zpub_ping => $self->publisher_ping_delay );
+}
+
+sub _zpub_reset_timer {
+  my ($kernel, $self) = @_[KERNEL, OBJECT];
+  $self->delay( _zpub_ping => $self->publisher_ping_delay );
+}
+
 sub publish {
   my ($self, $prefix, @parts) = @_;
   $self->zmq_sock_pub->send_multipart( $prefix, @parts );
+  $poe_kernel->post( $self->session_id, '_zpub_reset_timer' );
 }
 
 sub aliases {
@@ -221,7 +244,7 @@ sub _ircsock_input {
   my ($kernel, $self) = @_[KERNEL, OBJECT];
   my ($conn, $msg) = @_[ARG0 .. $#_];
 
-  if (lc $msg->command eq 'ping' && $self->handle_ping) {
+  if (lc $msg->command eq 'ping' && $self->handle_irc_ping) {
     $self->send(
       ircmsg(
         command => 'pong',
