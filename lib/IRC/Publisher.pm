@@ -364,6 +364,19 @@ FIXME
 
 =head1 DESCRIPTION
 
+This module provides a way to build IRC clients or servers composed of
+discrete components potentially implemented in (m)any languages (and possibly
+distributed across a network, etc). 
+
+The C<IRC::Publisher> object encapsulates a L<POE::Session> that manages a
+L<POEx::IRC::Backend> tied into a pair of L<POEx::ZMQ> sockets; a C<ZMQ_PUB>
+socket for publishing status or IRC traffic, and a C<ZMQ_ROUTER> socket for
+accepting commands from remote clients.
+
+There is no state-tracking and very little IRC protocol negotiation; the
+intention is for a higher-level layer to handle the details of communication
+with the server (see C<examples/> in this distribution).
+
 =head2 PUBLISHED EVENTS
 
 =head3 ircmsg
@@ -376,7 +389,7 @@ FIXME
 
 =head3 listen_on
 
-=head3 handle_ping
+=head3 handle_irc_ping
 
 =head3 irc
 
