@@ -19,6 +19,15 @@ use Try::Tiny;
 
 use Moo 1.006;
 
+has session_id => (
+  init_arg    => undef,
+  is          => 'ro',
+  writer      => '_set_session_id',
+  clearer     => '_clear_session_id',
+  predicate   => '_has_session_id',
+  builder     => sub { undef },
+);
+
 # Configurables
 has publish_on => (
   required    => 1,
@@ -113,6 +122,8 @@ sub BUILD {
     object_states => [
       $self => [ qw/
         _start
+        _stop
+        _session_cleanup
         _zrtr_recv_multipart
       / ],
       $self => +{
@@ -128,6 +139,8 @@ sub BUILD {
 sub _start {
   my ($kernel, $self) = @_[KERNEL, OBJECT];
 
+  $self->_set_session_id( $_[SESSION]->ID );
+
   $kernel->post( $self->irc->session_id => 'register' );
 
   $self->zmq_sock_pub->start;
@@ -137,11 +150,22 @@ sub _start {
   $self->listen_on->visit(sub { $self->zmq_sock_router->bind($_) });
 }
 
+sub _stop {
+  my ($kernel, $self) = @_[KERNEL, OBJECT];
+  $self->_clear_session_id;
+}
+
 sub stop {
   my ($self) = @_;
   $poe_kernel->post( $self->irc->session_id => 'shutdown' );
+  $poe_kernel->post( $self->session_id, '_session_cleanup' );
   $self->zmq_sock_pub->stop;
   $self->zmq_sock_router->stop;
+}
+
+sub _session_cleanup {
+  my ($kernel, $self) = @_[KERNEL, OBJECT];
+  $kernel->alarm_remove_all;
 }
 
 sub publish {
