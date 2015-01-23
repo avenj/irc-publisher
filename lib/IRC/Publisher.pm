@@ -154,11 +154,11 @@ sub _start {
   $self->zmq_sock_pub->start;
   $self->zmq_sock_router->start;
 
-  # FIXME set up a recurring 'PING' published whenever PUB is quiet
-  # for more than $self->publisher_ping_delay
-  # reset the delay in ->publish
   $self->publish_on->visit(sub { $self->zmq_sock_pub->bind($_) });
   $self->listen_on->visit(sub { $self->zmq_sock_router->bind($_) });
+
+  # Start PUB ping timer ->
+  $kernel->yield( '_zpub_reset_timer' );
 }
 
 sub _stop {
@@ -182,7 +182,7 @@ sub _session_cleanup {
 sub _zpub_ping {
   my ($kernel, $self) = @_[KERNEL, OBJECT];
   $self->publish( ping => time );
-  $kernel->delay( _zpub_ping => $self->publisher_ping_delay );
+  $kernel->yield( '_zpub_reset_timer' );
 }
 
 sub _zpub_reset_timer {
