@@ -47,9 +47,15 @@ sub new {
   };
 
   # DEALER will talk to IRC::Publisher's ROUTER command interface:
-  $self->{_zdealer} = $self->{_zmq}->socket(type => ZMQ_DEALER);
+  $self->{_zdealer} = $self->{_zmq}->socket(
+    type => ZMQ_DEALER,
+    event_prefix => '_zdealer_',
+  );
   # SUB will listen for IRC events from IRC::Publisher:
-  $self->{_zsub} = $self->{_zmq}->socket(type => ZMQ_SUB);
+  $self->{_zsub} = $self->{_zmq}->socket(
+    type => ZMQ_SUB,
+    event_prefix => '_zsub_',
+  );
 
   bless $self, $class;
 
@@ -58,7 +64,7 @@ sub new {
       $self => [ qw/
         _start
         _zdealer_recv_multipart
-        _zpub_recv_multipart
+        _zsub_recv_multipart
 
         send_irc_connect
         ping
