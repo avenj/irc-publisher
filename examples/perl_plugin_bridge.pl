@@ -88,24 +88,26 @@ sub _zdealer { shift->{_zdealer} }
 sub _zsub    { shift->{_zsub} }
 
 sub send_to_irc {
-  my ($self, $ircmsg) = @_;
-  # Message IDs are for your application's purpose and need not be globally
-  # unique; that is, the IRC::Publisher has no interest in these except to tag
-  # replies. We just use our message's refaddr, which is braindead but simple
-  # enough:
-  my $msgid = $ircmsg + 0;
+  my $self = shift;
+  for my $ircmsg (@_) {
+    # Message IDs are for your application's purpose and need not be globally
+    # unique; that is, the IRC::Publisher has no interest in these except to tag
+    # replies. We just use our message's refaddr, which is braindead but simple
+    # enough:
+    my $msgid = $ircmsg + 0;
 
-  # An IRC::Message::Object provides ->TO_JSON:
-  my $json = $self->_json->encode($ircmsg);
+    # An IRC::Message::Object provides ->TO_JSON:
+    my $json = $self->_json->encode($ircmsg);
 
-  # Our DEALER sends:
-  #  empty routing delimiter,
-  #  arbitrary message ID,
-  #  command,
-  #  JSON
-  $self->_zdealer->send_multipart(
-    '', $msgid, send => $json 
-  );
+    # Our DEALER sends:
+    #  empty routing delimiter,
+    #  arbitrary message ID,
+    #  command,
+    #  JSON
+    $self->_zdealer->send_multipart(
+      '', $msgid, send => $json 
+    );
+  }
 }
 
 sub _start {
