@@ -230,15 +230,15 @@ sub _zsub_recv_multipart {
 
     if ($ircmsg->command eq '001') {
       # If this is a 001 numeric, send our JOINs:
-      $self->channels->visit(sub {
+      $self->channels->natatime(4, sub {
         $self->send_to_irc(
-          ircmsg( command => 'join', params => [ $_ ] )
+          ircmsg( command => 'join', params => [ join ',', @_ ] )
         )
       });
       return
     }
 
-    # Trivial "plugin" dispatch via List::Objects::WithUtils;
+    # Trivial plugin dispatch via List::Objects::WithUtils;
     # visit each object in ->plugins and dispatch to '_cmd_foo' or '_default':
     $self->plugins->visit(sub {
       my $meth = '_cmd_'.lc($ircmsg->command);
