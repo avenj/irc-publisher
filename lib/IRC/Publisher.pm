@@ -244,7 +244,7 @@ sub _ircsock_input {
   my ($kernel, $self) = @_[KERNEL, OBJECT];
   my ($conn, $msg) = @_[ARG0 .. $#_];
 
-  if (lc $msg->command eq 'ping' && $self->handle_irc_ping) {
+  if ($self->handle_irc_ping && lc $msg->command eq 'ping') {
     $self->send(
       ircmsg(
         command => 'pong',
