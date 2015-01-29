@@ -2,8 +2,9 @@
 
 use strictures 1;
 
-# A simplistic plugin dispatch system for use with an IRC::Publisher:
 package My::PluginPlatform;
+
+# A simplistic plugin dispatch system for use with an IRC::Publisher:
 
 use JSON::MaybeXS;
 use IRC::Message::Object 'ircmsg';
@@ -289,18 +290,21 @@ sub _default {
 package main;
 
 use Getopt::Long;
-GetOptions(
-  # FIXME
-  #  nick
-  #  server
-  #  channels
-  #  remote
-  #  publisher
+my %opts;
+my @required = qw/remote publisher nick server channels/;
+GetOptions( 
+  \%opts, map {; $_ eq 'channels' ? $_.'=s@' : $_.'=s' } @required
 );
+for (@required) {
+  my $pname = '--'.$_;
+  die "Missing required parameter '$pname'" unless defined $opts{$_}
+}
+
+$opts{channels} = [ split /,/, join ',', @{ $opts{channels} } ];
 
 my $platform = My::PluginPlatform->new(
   plugins => [ My::Plugin::Hello->new, My::Plugin::ShowRawLines->new ],
-  # FIXME args from GetOptions
+  %opts
 );
 
 POE::Kernel->run
