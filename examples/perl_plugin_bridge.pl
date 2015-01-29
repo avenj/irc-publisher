@@ -66,7 +66,8 @@ sub new {
         _zdealer_recv_multipart
         _zsub_recv_multipart
 
-        send_irc_connect
+        ev_send_irc_connect
+        ev_send_irc_registration
         ping
       / ],
     ],
@@ -118,12 +119,12 @@ sub _start {
   # Subscribe to all messages from PUB:
   $self->_zsub->set_socket_opt(ZMQ_SUBSCRIBE, '');
   # Delay in case subscribing is slow, then we'll issue our commands:
-  $kernel->delay( send_irc_connect => 1 );
+  $kernel->delay( ev_send_irc_connect => 1 );
   # Start ping timer; we'll reset it whenever we have traffic:
   $kernel->delay( ping => 60 );
 }
 
-sub send_irc_connect {
+sub ev_send_irc_connect {
   my $self = $_[OBJECT];
 
   my $msgid = $self + 0;
@@ -134,6 +135,25 @@ sub send_irc_connect {
 
   $self->_zdealer->send_multipart(
     '', $msgid, connect => $json
+  );
+}
+
+sub ev_send_irc_registration {
+  my $self = $_[OBJECT];
+  $self->send_to_irc(
+    ircmsg(
+      command => 'user',
+      params  => [
+        'ircpub',   # username
+        '*', '*',   # unused in modern ircds
+        'IRC::Publisher example' # realname
+      ],
+    ),
+
+    ircmsg(
+      command => 'nick',
+      params  => [ $self->nick ],
+    )
   );
 }
 
@@ -181,8 +201,8 @@ sub _zdealer_recv_multipart {
   }
 }
 
-sub _zpub_recv_multipart {
-  my $self  = $_[OBJECT];
+sub _zsub_recv_multipart {
+  my ($kernel, $self) = @_[KERNEL, OBJECT];
   my $parts = $_[ARG0];
   
   # Publisher sends [ $type, @params ]:
@@ -191,8 +211,8 @@ sub _zpub_recv_multipart {
   if ($type eq 'ircstatus') {
     my $event = $parts->shift;
     if ($event eq 'connected') {
-      # Send registration:
-      # FIXME
+      # Connection established, try to register:
+      $kernel->yield('ev_send_irc_registration');
       return
     }
     if ($event eq 'failed' || $event eq 'disconnected') {
