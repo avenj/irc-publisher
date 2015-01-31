@@ -107,7 +107,7 @@ sub send_to_irc {
     #  command,
     #  JSON
     $self->_zdealer->send_multipart(
-      '', $msgid, send => $json 
+      [ '', $msgid, send => $json ]
     );
   }
 }
@@ -135,7 +135,7 @@ sub ev_send_irc_connect {
   );
 
   $self->_zdealer->send_multipart(
-    '', $msgid, connect => $json
+    [ '', $msgid, connect => $json ]
   );
 }
 
@@ -172,7 +172,7 @@ sub ping {
   $self->{_ping_pending} = 1;
 
   $self->_zdealer->send_multipart(
-    '', $msgid, 'ping' 
+    [ '', $msgid, 'ping' ]
   );
 
   $kernel->delay( ping => 60 );
