@@ -187,7 +187,7 @@ sub _zpub_ping {
 
 sub _zpub_reset_timer {
   my ($kernel, $self) = @_[KERNEL, OBJECT];
-  $self->delay( _zpub_ping => $self->publisher_ping_delay );
+  $kernel->delay( _zpub_ping => $self->publisher_ping_delay );
 }
 
 sub publish {
