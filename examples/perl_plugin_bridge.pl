@@ -192,11 +192,16 @@ sub _zdealer_recv_multipart {
   my $response  = $self->_json->decode($json);
 
   if ($response->{code} == 500) {
-    # FIXME received error from Publisher
+    my $err = $response->{msg};
+    warn "WARNING; error from remote IRC::Publisher: $err\n";
+    return
   }
 
-  # FIXME these should be command ACKs or a pong
-  #  on pong, decrement $self->{_ping_pending}
+  if ($response->{code} == 200 && $response->{msg} eq 'ACK') {
+    my $cmd = $response->{data};
+    print "Publisher acknowledged command: $cmd\n";
+  }
+
   if ($response->{msg} eq 'PONG') {
     $self->{_ping_pending} = 0;
   }
