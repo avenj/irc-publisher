@@ -210,7 +210,7 @@ sub connect {
   }
 
   croak 'Alias must be in the [A-Za-z0-9_-] set'
-    unless $params{alias} =~ /^[A-Za-z0-9_-]$/;
+    unless $params{alias} =~ /^[A-Za-z0-9_-]+$/;
   
   $self->backend->create_connector(
     tag => $params{alias},
