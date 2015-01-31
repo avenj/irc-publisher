@@ -321,14 +321,14 @@ sub _cmd_bad_input {
 sub _cmd_connect {
   my ($self, $id, $params) = @_;
   $self->connect(%$params);
-  +{ code => 200, msg => "ACK CONNECT", id => $id }
+  +{ code => 200, msg => "ACK", data => "CONNECT", id => $id }
 }
 
 sub _cmd_disconnect {
   my ($self, $id, $params) = @_;
   my $alias = delete $params->{alias} // die "Missing required param 'alias'";
   $self->disconnect($alias);
-  +{ code => 200, msg => "ACK DISCONNECT", id => $id }
+  +{ code => 200, msg => "ACK", data => "DISCONNECT", id => $id }
 }
 
 sub _cmd_send {
@@ -336,12 +336,17 @@ sub _cmd_send {
   my $alias = delete $params->{alias} // die "Missing required param 'alias'";
   my $ircmsg = ircmsg(%$params);
   $self->send($alias => $ircmsg);
-  +{ code => 200, msg => "ACK SEND", id => $id }
+  +{ code => 200, msg => "ACK", data => "SEND", id => $id }
 }
 
 sub _cmd_aliases {
   my ($self, $id) = @_;
-  +{ code => 200, msg => $self->_alias->keys->join(' '), id => $id }
+  +{ 
+    code  => 200, 
+    msg   => "ALIASES", 
+    data  => $self->_alias->keys->join(' '),
+    id    => $id 
+  }
 }
 
 sub _cmd_ping {
