@@ -49,13 +49,13 @@ sub new {
 
   # DEALER will talk to IRC::Publisher's ROUTER command interface:
   $self->{_zdealer} = $self->{_zmq}->socket(
-    type => ZMQ_DEALER,
-    event_prefix => '_zdealer_',
+    type          => ZMQ_DEALER,
+    event_prefix  => '_zdealer_',
   );
   # SUB will listen for IRC events from IRC::Publisher:
   $self->{_zsub} = $self->{_zmq}->socket(
-    type => ZMQ_SUB,
-    event_prefix => '_zsub_',
+    type          => ZMQ_SUB,
+    event_prefix  => '_zsub_',
   );
 
   bless $self, $class;
@@ -297,8 +297,20 @@ package main;
 use Getopt::Long;
 my %opts;
 my @required = qw/remote publisher nick server channels/;
-GetOptions( 
-  \%opts, map {; $_ eq 'channels' ? $_.'=s@' : $_.'=s' } @required
+GetOptions( \%opts, 
+  help => sub {
+    print "$0\n\n",
+      "  --remote=ENDPOINT\n",
+      "  --publisher=ENDPOINT\n",
+      "  --nick=NICKNAME\n",
+      "  --server=ADDR\n",
+      "  --channels=CHAN[,CHAN, ...]\n",
+      "\n"
+    ;
+    exit 0
+  },
+
+  map {; $_ eq 'channels' ? $_.'=s@' : $_.'=s' } @required,
 );
 for (@required) {
   my $pname = '--'.$_;
