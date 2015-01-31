@@ -192,7 +192,7 @@ sub _zpub_reset_timer {
 
 sub publish {
   my ($self, $prefix, @parts) = @_;
-  $self->zmq_sock_pub->send_multipart( $prefix, @parts );
+  $self->zmq_sock_pub->send_multipart( [ $prefix, @parts ] );
   $poe_kernel->post( $self->session_id, '_zpub_reset_timer' );
 }
 
