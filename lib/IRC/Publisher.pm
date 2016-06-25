@@ -1,29 +1,22 @@
 package IRC::Publisher;
 
-
-# FIXME
-#   abstract out Transport:: layer
-#   (default to Transport::TCP)
-
 use Carp;
 use strictures 2;
 
-use IRC::Message::Object    'ircmsg';
-
 use List::Objects::Types    -types;
-use POEx::ZMQ::Types        -types;
 use Types::Standard         -types;
+
+use IRC::Message::Object    'ircmsg';
 
 use JSON::MaybeXS;
 
 use POE;
-use POEx::ZMQ;
 use POEx::IRC::Backend;
 
 use Try::Tiny;
 
 
-use Moo 2;
+use Moo;
 
 has session_id => (
   init_arg    => undef,
@@ -34,21 +27,18 @@ has session_id => (
   builder     => sub { undef },
 );
 
-# Configurables
-has publish_on => (
-  required    => 1,
-  is          => 'ro',
-  isa         => TypedArray[ZMQEndpoint],
-  coerce      => 1,
-);
-
-has listen_on => (
+has publish_on_addr => (
   lazy        => 1,
   is          => 'ro',
-  isa         => TypedArray[ZMQEndpoint],
-  coerce      => 1,
-  predicate   => 1,
-  builder     => sub { [] },
+  isa         => Str,
+  builder     => sub { '127.0.0.1' },
+);
+
+has publish_on_port => (
+  lazy        => 1,
+  is          => 'ro',
+  isa         => Int,
+  builder     => sub { '9090' },
 );
 
 has publisher_ping_delay => (
@@ -72,6 +62,8 @@ has irc => (
   builder     => sub { POEx::IRC::Backend->spawn },
 );
 
+# FIXME set up ->publisher POEx::IRC::Backend
+
 has json => (
   lazy        => 1,
   is          => 'ro',
@@ -87,7 +79,7 @@ has json => (
 
 
 has _alias => (
-  # alias => POEx::IRC::Backend::Connect
+  # +{ $alias => POEx::IRC::Backend::Connect }
   lazy        => 1,
   is          => 'ro',
   isa         => HashObj,
@@ -97,37 +89,6 @@ has _alias => (
 );
 
 
-# ZeroMQ bits
-has zmq => (
-  lazy        => 1,
-  is          => 'ro',
-  isa         => InstanceOf['POEx::ZMQ'],
-  builder     => sub { POEx::ZMQ->new },
-);
-
-has zmq_sock_pub => (
-  lazy        => 1,
-  is          => 'ro',
-  isa         => ZMQSocket[ZMQ_PUB],
-  builder     => sub {
-    my ($self) = @_;
-    $self->zmq->socket(type => ZMQ_PUB)
-  },
-);
-
-has zmq_sock_router => (
-  lazy        => 1,
-  is          => 'ro',
-  isa         => ZMQSocket[ZMQ_ROUTER],
-  builder     => sub {
-    my ($self) = @_;
-    $self->zmq->socket(
-      type          => ZMQ_ROUTER,
-      event_prefix  => 'zrtr_',
-    )
-  },
-);
-
 sub BUILD {
   my ($self) = @_;
   POE::Session->create(
@@ -136,11 +97,16 @@ sub BUILD {
         _start
         _stop
         _session_cleanup
-        _zpub_ping
-        _zpub_reset_timer
-        _zrtr_recv_multipart
+        _pub_ping
+        _pub_ping_timer
       / ],
       $self => +{
+        # FIXME these are shared between publisher & irc backends;
+        #  we need to suss out which is which based on $_[SENDER]
+        #  & dispatch accordingly 
+        #  $_[SENDER] ==
+        #   ->irc->session_id       # published as ircmsg events
+        #   ->publisher->session_id # sent to command dispatcher
         ircsock_input             => '_ircsock_input',
         ircsock_connector_open    => '_ircsock_open',
         ircsock_connector_failure => '_ircsock_failed',
@@ -155,16 +121,11 @@ sub _start {
 
   $self->_set_session_id( $_[SESSION]->ID );
 
+  $kernel->post( $self->publisher->session_id => 'register' );
   $kernel->post( $self->irc->session_id => 'register' );
 
-  $self->zmq_sock_pub->start;
-  $self->zmq_sock_router->start;
-
-  $self->publish_on->visit(sub { $self->zmq_sock_pub->bind($_) });
-  $self->listen_on->visit(sub { $self->zmq_sock_router->bind($_) });
-
   # Start PUB ping timer ->
-  $kernel->yield( '_zpub_reset_timer' );
+  $kernel->yield( '_pub_ping_timer' );
 }
 
 sub _stop {
@@ -176,8 +137,6 @@ sub stop {
   my ($self) = @_;
   $poe_kernel->post( $self->irc->session_id => 'shutdown' );
   $poe_kernel->post( $self->session_id => '_session_cleanup' );
-  $self->zmq_sock_pub->stop;
-  $self->zmq_sock_router->stop;
 }
 
 sub _session_cleanup {
@@ -185,21 +144,23 @@ sub _session_cleanup {
   $kernel->alarm_remove_all;
 }
 
-sub _zpub_ping {
+sub _pub_ping {
   my ($kernel, $self) = @_[KERNEL, OBJECT];
+  # send a PING if we haven't spoken in a while,
+  # our subscribers will know we're not dead ->
   $self->publish( ping => time );
-  $kernel->yield( '_zpub_reset_timer' );
+  $kernel->yield( '_pub_ping_timer' );
 }
 
-sub _zpub_reset_timer {
+sub _pub_ping_timer {
   my ($kernel, $self) = @_[KERNEL, OBJECT];
-  $kernel->delay( _zpub_ping => $self->publisher_ping_delay );
+  $kernel->delay( _pub_ping => $self->publisher_ping_delay );
 }
 
 sub publish {
   my ($self, $prefix, @parts) = @_;
-  $self->zmq_sock_pub->send_multipart( [ $prefix, @parts ] );
-  $poe_kernel->post( $self->session_id, '_zpub_reset_timer' );
+  # FIXME
+  $poe_kernel->post( $self->session_id, '_pub_ping_timer' );
 }
 
 sub aliases {
@@ -218,7 +179,7 @@ sub connect {
   croak 'Alias must be in the [A-Za-z0-9_-] set'
     unless $params{alias} =~ /^[A-Za-z0-9_-]+$/;
   
-  $self->backend->create_connector(
+  $self->irc->create_connector(
     tag => $params{alias},
 
     remoteaddr => $params{addr},
@@ -232,16 +193,14 @@ sub connect {
 sub disconnect {
   my ($self, $alias) = @_;
 
-  my $conn = $self->_alias->get($alias)
-    || confess "No such alias '$alias'";
+  my $conn = $self->_alias->get($alias) || confess "No such alias '$alias'";
   $self->irc->disconnect($conn->wheel_id, 'Disconnecting');
 }
 
 sub send {
   my ($self, $alias, $ircmsg) = @_;
 
-  my $conn = $self->_alias->get($alias)
-    || confess "No such alias '$alias'";
+  my $conn = $self->_alias->get($alias)  || confess "No such alias '$alias'";
   $self->irc->send($ircmsg, $conn);
 }
 
@@ -249,6 +208,10 @@ sub send {
 sub _ircsock_input {
   my ($kernel, $self) = @_[KERNEL, OBJECT];
   my ($conn, $msg) = @_[ARG0 .. $#_];
+
+  # FIXME dispatch based on $_[SENDER], may be from irc or publisher
+  # FIXME irc-side dispatch should suss out what $alias this connect belongs to
+  #   (should be in $conn->args->{tag} it appears)
 
   if ($self->handle_irc_ping && lc $msg->command eq 'ping') {
     $self->send(
@@ -293,6 +256,7 @@ sub _ircsock_disconnect {
 
 
 sub _zrtr_recv_multipart {
+  # FIXME kill this in favor of incoming publisher-side message handler
   my ($kernel, $self) = @_[KERNEL, OBJECT];
   my $msg = $_[ARG0];
   my $envelope = $msg->items_before(sub { ! length });

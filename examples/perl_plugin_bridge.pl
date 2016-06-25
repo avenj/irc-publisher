@@ -1,5 +1,7 @@
 #!/usr/bin/env perl
 
+## FIXME convert to new-style non-zmq setup
+
 use strictures 1;
 
 package My::PluginPlatform;
