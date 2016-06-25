@@ -1,8 +1,7 @@
-requires "perl"       => "5.008";
-requires "strictures" => "1";
+requires "strictures" => "2";
 
 requires "List::Objects::Types"     => "1";
-requires "Moo"                      => "1.006";
+requires "Moo"                      => "2";
 requires "Types::Standard"          => "0";
 
 requires "JSON::MaybeXS"      => "0";

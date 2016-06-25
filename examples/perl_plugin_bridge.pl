@@ -52,11 +52,15 @@ sub new {
     type          => ZMQ_DEALER,
     event_prefix  => '_zdealer_',
   );
+
   # SUB will listen for IRC events from IRC::Publisher:
   $self->{_zsub} = $self->{_zmq}->socket(
     type          => ZMQ_SUB,
     event_prefix  => '_zsub_',
   );
+
+  # SUB will subscribe to all events:
+  $self->{_zsub}->set_sock_opt(ZMQ_SUBSCRIBE, '');
 
   bless $self, $class;
 
@@ -123,6 +127,10 @@ sub _start {
   $kernel->delay( ev_send_irc_connect => 1 );
   # Start ping timer; we'll reset it whenever we have traffic:
   $kernel->delay( ping => 60 );
+}
+
+sub stop {
+  # FIXME kill timers, issue shutdown to sockets
 }
 
 sub ev_send_irc_connect {

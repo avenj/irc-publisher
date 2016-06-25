@@ -1,7 +1,12 @@
 package IRC::Publisher;
 
+
+# FIXME
+#   abstract out Transport:: layer
+#   (default to Transport::TCP)
+
 use Carp;
-use strictures 1;
+use strictures 2;
 
 use IRC::Message::Object    'ircmsg';
 
@@ -17,7 +22,8 @@ use POEx::IRC::Backend;
 
 use Try::Tiny;
 
-use Moo 1.006;
+
+use Moo 2;
 
 has session_id => (
   init_arg    => undef,
@@ -169,7 +175,7 @@ sub _stop {
 sub stop {
   my ($self) = @_;
   $poe_kernel->post( $self->irc->session_id => 'shutdown' );
-  $poe_kernel->post( $self->session_id, '_session_cleanup' );
+  $poe_kernel->post( $self->session_id => '_session_cleanup' );
   $self->zmq_sock_pub->stop;
   $self->zmq_sock_router->stop;
 }
