@@ -28,6 +28,7 @@ has session_id => (
 );
 
 has publish_on_addr => (
+  # FIXME optionally handle ARRAY of addrs to listen on
   lazy        => 1,
   is          => 'ro',
   isa         => Str,
@@ -35,6 +36,7 @@ has publish_on_addr => (
 );
 
 has publish_on_port => (
+  # FIXME optionally handle ARRAY of ports to listen on
   lazy        => 1,
   is          => 'ro',
   isa         => Int,
@@ -107,10 +109,13 @@ sub BUILD {
         #  $_[SENDER] ==
         #   ->irc->session_id       # published as ircmsg events
         #   ->publisher->session_id # sent to command dispatcher
+        # Shared:
         ircsock_input             => '_ircsock_input',
-        ircsock_connector_open    => '_ircsock_open',
-        ircsock_connector_failure => '_ircsock_failed',
         ircsock_disconnect        => '_ircsock_disconnect',
+        # Connector-only:
+        ircsock_connector_open    => '_ircsock_irc_connected',
+        ircsock_connector_failure => '_ircsock_irc_failed',
+        # Listener-only: FIXME
       },
     ],
   )
@@ -159,7 +164,7 @@ sub _pub_ping_timer {
 
 sub publish {
   my ($self, $prefix, @parts) = @_;
-  # FIXME
+  # FIXME ->send to all seen ->publisher connects
   $poe_kernel->post( $self->session_id, '_pub_ping_timer' );
 }
 
@@ -204,6 +209,15 @@ sub send {
   $self->irc->send($ircmsg, $conn);
 }
 
+sub _ircsock_disconnect {
+  my ($kernel, $self) = @_[KERNEL, OBJECT];
+  my $conn = $_[ARG0];
+  # FIXME these could be irc or publisher side, handle cleanup appropriately
+  my $alias = $conn->args->{tag}
+    || confess "BUG - Connector obj is missing alias tag";
+  $self->_alias->delete($alias);
+  $self->publish( ircstatus => disconnected => $alias );
+}
 
 sub _ircsock_input {
   my ($kernel, $self) = @_[KERNEL, OBJECT];
@@ -227,7 +241,16 @@ sub _ircsock_input {
   $self->publish( ircmsg => $self->json->encode($msg) );
 }
 
-sub _ircsock_open {
+# FIXME handle:
+#  ircsock_connection_idle  (only applies to publisher-side listens)
+#   -> mandate ping/pong heartbeating, kill if we get connection_idle twice?
+#  ircsock_listener_failure (publisher failed to open port(s))
+#  ircsock_listener_open    (publisher accepted a new connect we need to track)
+#   -> fix disconnect handling, both hit ircsock_disconnect
+
+sub _ircsock_irc_connected {
+  # Outgoing open -- on our ->irc backend presumably
+  #  (though TODO; outgoing ->publisher connects ?)
   my ($kernel, $self) = @_[KERNEL, OBJECT];
   my $conn = $_[ARG0];
   my $alias = $conn->args->{tag}
@@ -236,7 +259,7 @@ sub _ircsock_open {
   $self->publish( ircstatus => connected => $alias );
 }
 
-sub _ircsock_failed {
+sub _ircsock_irc_failed {
   my ($kernel, $self) = @_[KERNEL, OBJECT];
   my ($connector, $op, $errno, $errstr) = @_[ARG0 .. $#_];
   my $alias = $connector->args->{tag}
@@ -245,14 +268,6 @@ sub _ircsock_failed {
   $self->publish( ircstatus => failed => $alias, $op, $errno, $errstr );
 }
 
-sub _ircsock_disconnect {
-  my ($kernel, $self) = @_[KERNEL, OBJECT];
-  my $conn = $_[ARG0];
-  my $alias = $conn->args->{tag}
-    || confess "BUG - Connector obj is missing alias tag";
-  $self->_alias->delete($alias);
-  $self->publish( ircstatus => disconnected => $alias );
-}
 
 
 sub _zrtr_recv_multipart {
