@@ -1,5 +1,7 @@
 requires "strictures" => "2";
 
+requires "App::bmkpasswd" => "2";
+
 requires "List::Objects::Types"     => "1";
 requires "Moo"                      => "2";
 requires "Types::Standard"          => "0";
