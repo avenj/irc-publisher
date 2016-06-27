@@ -28,7 +28,6 @@ has session_id => (
 );
 
 has publish_on_addr => (
-  # FIXME optionally handle ARRAY of addrs to listen on
   lazy        => 1,
   is          => 'ro',
   isa         => Str,
@@ -36,14 +35,13 @@ has publish_on_addr => (
 );
 
 has publish_on_port => (
-  # FIXME optionally handle ARRAY of ports to listen on
   lazy        => 1,
   is          => 'ro',
   isa         => Int,
   builder     => sub { '9090' },
 );
 
-has publisher_ping_delay => (
+has pub_ping_delay => (
   is          => 'ro',
   isa         => StrictNum,
   builder     => sub { 30 },
@@ -57,6 +55,7 @@ has handle_irc_ping => (
 
 
 # Backends
+#  FIXME private _irc / _pub ?
 has irc => (
   lazy        => 1,
   is          => 'ro',
@@ -64,7 +63,7 @@ has irc => (
   builder     => sub { POEx::IRC::Backend->spawn },
 );
 
-# FIXME set up ->publisher POEx::IRC::Backend
+# FIXME set up ->pub POEx::IRC::Backend
 
 has json => (
   lazy        => 1,
@@ -81,6 +80,7 @@ has json => (
 
 
 has _alias => (
+  # aliases for IRC-facing active Connects;
   # +{ $alias => POEx::IRC::Backend::Connect }
   lazy        => 1,
   is          => 'ro',
@@ -103,12 +103,12 @@ sub BUILD {
         _pub_ping_timer
       / ],
       $self => +{
-        # FIXME these are shared between publisher & irc backends;
+        # FIXME these are shared between pub & irc backends;
         #  we need to suss out which is which based on $_[SENDER]
         #  & dispatch accordingly 
         #  $_[SENDER] ==
         #   ->irc->session_id       # published as ircmsg events
-        #   ->publisher->session_id # sent to command dispatcher
+        #   ->pub->session_id # sent to command dispatcher
         # Shared:
         ircsock_input             => '_ircsock_input',
         ircsock_disconnect        => '_ircsock_disconnect',
@@ -126,8 +126,10 @@ sub _start {
 
   $self->_set_session_id( $_[SESSION]->ID );
 
-  $kernel->post( $self->publisher->session_id => 'register' );
+  $kernel->post( $self->pub->session_id => 'register' );
   $kernel->post( $self->irc->session_id => 'register' );
+
+  # FIXME set up ->pub listeners
 
   # Start PUB ping timer ->
   $kernel->yield( '_pub_ping_timer' );
@@ -140,6 +142,8 @@ sub _stop {
 
 sub stop {
   my ($self) = @_;
+  # FIXME publish shutdown status, disconnect open listener connects
+  $poe_kernel->post( $self->pub->session_id => 'shutdown' );
   $poe_kernel->post( $self->irc->session_id => 'shutdown' );
   $poe_kernel->post( $self->session_id => '_session_cleanup' );
 }
@@ -159,12 +163,18 @@ sub _pub_ping {
 
 sub _pub_ping_timer {
   my ($kernel, $self) = @_[KERNEL, OBJECT];
-  $kernel->delay( _pub_ping => $self->publisher_ping_delay );
+  $kernel->delay( _pub_ping => $self->pub_ping_delay );
+}
+
+sub send {
+  my ($self, $alias, $ircmsg) = @_;
+  my $conn = $self->_alias->get($alias)  || confess "No such alias '$alias'";
+  $self->irc->send($ircmsg, $conn);
 }
 
 sub publish {
   my ($self, $prefix, @parts) = @_;
-  # FIXME ->send to all seen ->publisher connects
+  # FIXME ->send to all seen ->pub Connects
   $poe_kernel->post( $self->session_id, '_pub_ping_timer' );
 }
 
@@ -197,22 +207,15 @@ sub connect {
 
 sub disconnect {
   my ($self, $alias) = @_;
-
   my $conn = $self->_alias->get($alias) || confess "No such alias '$alias'";
   $self->irc->disconnect($conn->wheel_id, 'Disconnecting');
 }
 
-sub send {
-  my ($self, $alias, $ircmsg) = @_;
-
-  my $conn = $self->_alias->get($alias)  || confess "No such alias '$alias'";
-  $self->irc->send($ircmsg, $conn);
-}
 
 sub _ircsock_disconnect {
   my ($kernel, $self) = @_[KERNEL, OBJECT];
   my $conn = $_[ARG0];
-  # FIXME these could be irc or publisher side, handle cleanup appropriately
+  # FIXME these could be irc or pub side, handle cleanup appropriately
   my $alias = $conn->args->{tag}
     || confess "BUG - Connector obj is missing alias tag";
   $self->_alias->delete($alias);
@@ -223,9 +226,9 @@ sub _ircsock_input {
   my ($kernel, $self) = @_[KERNEL, OBJECT];
   my ($conn, $msg) = @_[ARG0 .. $#_];
 
-  # FIXME dispatch based on $_[SENDER], may be from irc or publisher
+  # FIXME dispatch based on $_[SENDER], may be from irc or pub
   # FIXME irc-side dispatch should suss out what $alias this connect belongs to
-  #   (should be in $conn->args->{tag} it appears)
+  #   (attach metadata to Connect objs in irc_connected ?)
 
   if ($self->handle_irc_ping && lc $msg->command eq 'ping') {
     $self->send(
@@ -242,15 +245,19 @@ sub _ircsock_input {
 }
 
 # FIXME handle:
-#  ircsock_connection_idle  (only applies to publisher-side listens)
+#  ircsock_connection_idle  (only applies to pub-side listens)
 #   -> mandate ping/pong heartbeating, kill if we get connection_idle twice?
-#  ircsock_listener_failure (publisher failed to open port(s))
-#  ircsock_listener_open    (publisher accepted a new connect we need to track)
+#  ircsock_listener_failure (pub failed to open port(s))
+#  ircsock_listener_open    (pub accepted a new connect we need to track)
+#     * auth handshake for new connects
+#       -> Auth.pm stackable auth pipeline, could probably use
+#          MooX::Role::Pluggable for this (poex-irc-backend loads it anyway)
+#     * ping timer(s) for new connects? or publish a ping to all at interval
 #   -> fix disconnect handling, both hit ircsock_disconnect
 
 sub _ircsock_irc_connected {
   # Outgoing open -- on our ->irc backend presumably
-  #  (though TODO; outgoing ->publisher connects ?)
+  #  (though TODO; outgoing ->pub connects ?)
   my ($kernel, $self) = @_[KERNEL, OBJECT];
   my $conn = $_[ARG0];
   my $alias = $conn->args->{tag}
@@ -271,7 +278,7 @@ sub _ircsock_irc_failed {
 
 
 sub _zrtr_recv_multipart {
-  # FIXME kill this in favor of incoming publisher-side message handler
+  # FIXME kill this in favor of incoming pub-side message handler
   my ($kernel, $self) = @_[KERNEL, OBJECT];
   my $msg = $_[ARG0];
   my $envelope = $msg->items_before(sub { ! length });
