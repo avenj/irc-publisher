@@ -42,13 +42,38 @@ sub _trigger_policy {
   }
 }
 
+
 has accounts => (
-  # For -passwd auth policy; $account -> $passwd
+  # For -passwd auth policy; $account -> $bcrypt
   is        => 'ro',
   isa       => HashObj,
   coerce    => 1,
   builder   => sub { +{} },
 );
+
+sub account_names { shift->accounts->keys }
+
+sub add_account {
+  my ($self, $acct, $passwd) = @_;
+  confess "Expected account name and (crypt) password"
+    unless defined $acct and defined $passwd;
+  carp "Warning; replacing existing account '$acct'"
+    if $self->accounts->exists($acct);
+  $self->accounts->set($acct => $passwd);
+  $self
+}
+
+sub del_account {
+  my ($self, $acct) = @_;
+  confess "Expected account name" unless defined $acct;
+  unless ( $self->accounts->exists($acct) ) {
+    carp "Cannot del_account nonexistant account '$acct'";
+    return
+  }
+  $self->accounts->delete($acct);
+  $self
+}
+
 
 has _addr_blacklist => (
   is        => 'ro',
