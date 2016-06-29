@@ -141,7 +141,7 @@ sub is_whitelisted {
 
 { package
     IRC::Publisher::AuthReturnValue;
-  sub new { bless [@_], shift }
+  sub new { my $class = shift; bless [@_], $class }
   sub allowed { shift->[0] }
   sub message { shift->[1] }
 }
@@ -181,7 +181,7 @@ sub _check_passwd {
   return [0, 'bad params'] unless defined $acct and defined $passwd;
   return [0, 'unknown account'] unless $self->accounts->exists($acct);
   my $crypt = $self->accounts->get($acct);
-  return [1, 'allow'] if passwdcmp $passwd => $crypt;
+  return [1, 'allow'] if passwdcmp($passwd => $crypt);
   [0, 'bad passwd']
 }
 
