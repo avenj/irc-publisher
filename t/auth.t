@@ -24,16 +24,22 @@ my $ret = $auth->check('1.2.3.4', foo => PASSWD);
 ok $ret->allowed, '->check->allowed (1.2.3.4 + passwd)';
 cmp_ok $ret->message, 'eq', 'allow', '->check->message (1.2.3.4 + passwd)'
   or diag explain $ret;
+$ret = $auth->check('1.2.3.4', foo => 'badpasswd');
+ok !$ret->allowed, '->check->allowed negative (bad passwd)';
 
 # ->account_names
 $auth->add_account( bar => $pwd );
 is_deeply $auth->account_names->sort->unbless, [ 'bar', 'foo' ],
   'account_names';
+$ret = $auth->check('1234', bar => PASSWD);
+ok $ret->allowed, '->check->allowed (after add_account)';
 
 # ->del_account
 ok $auth->del_account( 'bar' ), 'del_account';
 is_deeply $auth->account_names->unbless, ['foo'],
   'account_names after del_account';
+$ret = $auth->check('1234', bar => PASSWD);
+ok !$ret->allowed, '->check->allowed negative (after del_account)';
 
 # ->blacklist
 # ->is_blacklisted
@@ -48,8 +54,6 @@ is_deeply $auth->account_names->unbless, ['foo'],
 # ->get_whitelist
 # FIXME
 
-# ->check
-# FIXME
 
 # FIXME policy combinations
 
