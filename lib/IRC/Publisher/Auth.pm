@@ -6,10 +6,10 @@ use strictures 2;
 use App::bmkpasswd 'passwdcmp';
 
 use List::Objects::WithUtils;
+
 use List::Objects::Types  -types;
 use Types::Standard       -types;
-
-use Net::CIDR::Set;
+use IRC::Publisher::Types -types;
 
 use Moo;
 
@@ -76,13 +76,12 @@ sub del_account {
   $self
 }
 
-# FIXME
-#  turn _addr_blacklist and _addr_whitelist into Net::CIDR::Set objects
-#  proxy methods to Net::CIDR::Set (handles =>  ?)
+
 has _addr_blacklist => (
   is        => 'ro',
-  isa       => InstanceOf['Net::CIDR::Set'],
-  builder   => sub { Net::CIDR::Set->new },
+  isa       => CIDRSet,
+  coerce    => 1,
+  builder   => sub { [] },
 );
 
 sub get_blacklist { array(shift->_addr_blacklist->as_cidr_array) }
@@ -112,8 +111,9 @@ sub is_blacklisted {
 
 has _addr_whitelist => (
   is        => 'ro',
-  isa       => InstanceOf['Net::CIDR::Set'],
-  builder   => sub { Net::CIDR::Set->new },
+  isa       => CIDRSet,
+  coerce    => 1,
+  builder   => sub { [] },
 );
 
 sub get_whitelist { array(shift->_addr_whitelist->as_cidr_array) }
