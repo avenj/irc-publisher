@@ -108,6 +108,7 @@ sub is_blacklisted {
   $self->_addr_blacklist->exists($addr)
 }
 
+
 has _addr_whitelist => (
   is        => 'ro',
   isa       => HashObj,
@@ -137,6 +138,7 @@ sub is_whitelisted {
   $self->_addr_whitelist->exists($addr)
 }
 
+
 { package
     IRC::Publisher::AuthReturnValue;
   sub new { bless [@_], shift }
@@ -152,7 +154,7 @@ sub check {
   # Returns [$bool, $info_string] with ->allowed & ->message accessors
   my ($self, $addr, @params) = @_;
   
-  for my $chkpolicy ($self->policy->all) {
+  POLICY: for my $chkpolicy ($self->policy->all) {
     my $dispatch_to = substr $chkpolicy, 1;
     my $meth = "_check_${dispatch_to}";
     confess "BUG; no such method '$meth' for policy '$chkpolicy'"
