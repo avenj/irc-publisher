@@ -78,70 +78,65 @@ sub del_account {
 
 # FIXME
 #  turn _addr_blacklist and _addr_whitelist into Net::CIDR::Set objects
-#  proxy methods to Net::CIDR::Set
+#  proxy methods to Net::CIDR::Set (handles =>  ?)
 has _addr_blacklist => (
   is        => 'ro',
-  isa       => HashObj,
-  coerce    => 1,
-  builder   => sub { +{} },
+  isa       => InstanceOf['Net::CIDR::Set'],
+  builder   => sub { Net::CIDR::Set->new },
 );
 
-sub get_blacklist { shift->_addr_blacklist->keys }
+sub get_blacklist { array(shift->_addr_blacklist->as_cidr_array) }
 
 sub blacklist {
-  my ($self, $addr) = @_;
-  confess "->blacklist expected an address" unless defined $addr;
-  $self->_addr_blacklist->set($addr => 1);
+  my ($self, @addrs) = @_;
+  confess "->blacklist expected an address" unless @addrs;
+  $self->_addr_blacklist->add(@addrs);
   $self
 }
 
 sub unblacklist {
-  my ($self, $addr) = @_;
-  confess "->unblacklist expected an address" unless defined $addr;
-  unless ( $self->_addr_blacklist->exists($addr) ) {
-    carp "No blacklist entry found for addr '$addr'";
-    return
-  }
-  $self->_addr_blacklist->delete($addr);
+  my ($self, @addrs) = @_;
+  confess "->unblacklist expected an address" unless @addrs;
+  # Net::CIDR::Set doesn't care if these exist or not ->
+  $self->_addr_blacklist->remove(@addrs);
   $self
 }
 
 sub is_blacklisted {
   my ($self, $addr) = @_;
-  # FIXME range matching module?
   confess "->is_blacklisted expected an address" unless defined $addr;
-  # FIXME
+  return if $self->_addr_blacklist->is_empty;
+  $self->_addr_blacklist->contains($addr)
 }
 
 
 has _addr_whitelist => (
   is        => 'ro',
-  isa       => HashObj,
-  coerce    => 1,
-  builder   => sub { +{} },
+  isa       => InstanceOf['Net::CIDR::Set'],
+  builder   => sub { Net::CIDR::Set->new },
 );
 
-sub get_whitelist { shift->_addr_whitelist->keys }
+sub get_whitelist { array(shift->_addr_whitelist->as_cidr_array) }
 
 sub whitelist {
-  my ($self, $addr) = @_;
-  confess "->whitelist expected an address" unless defined $addr;
-  $self->_addr_whitelist->set($addr => 1);
+  my ($self, @addrs) = @_;
+  confess "->whitelist expected an address" unless @addrs;
+  $self->_addr_whitelist->add(@addrs);
   $self
 }
 
 sub unwhitelist {
-  my ($self, $addr) = @_;
-  confess "->unwhitelist expected an address" unless defined $addr;
-  $self->_addr_whitelist->delete($addr);
+  my ($self, @addrs) = @_;
+  confess "->unwhitelist expected an address" unless @addrs;
+  $self->_addr_whitelist->remove(@addrs);
   $self
 }
 
 sub is_whitelisted {
   my ($self, $addr) = @_;
-  # FIXME range match...?
   confess "->is_whitelisted expected an address" unless defined $addr;
-  $self->_addr_whitelist->exists($addr)
+  return if $self->_addr_whitelist->is_empty;
+  $self->_addr_whitelist->contains($addr)
 }
 
 
