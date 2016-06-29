@@ -53,8 +53,16 @@ ok !$auth->is_blacklisted('127.0.0.1'), 'is_blacklisted after unblacklist';
 ok $auth->is_blacklisted('192.168.0.4'), 
   'negative is_blacklisted after unblacklist';
 # ->get_blacklist
-# FIXME
-# FIXME explicit test for blacklisted but passwd ok on ->check
+ok $auth->get_blacklist->count == 1,
+  '->get_blacklist ArrayObj contains 1 item';
+like $auth->get_blacklist->get(0), qr/192.168/,
+  '->get_blacklist ArrayObj looks ok';
+
+# ->check for blacklisted addr, good passwd
+$ret = $auth->check('192.168.0.4', foo => PASSWD);
+ok !$ret->allowed, 'blacklisted addr disallowed (passwd ok)';
+like $ret->message, qr/blacklist/,
+  'blacklisted addr produced correct message';
 
 # ->whitelist ( FIXME enable whitelist policy ) / ->is_whitelisted
 # ->unwhitelist
