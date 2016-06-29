@@ -1,6 +1,8 @@
 use Test::More;
 use strict; use warnings;
 
+sub PASSWD () { 'bar' }
+
 use Crypt::Bcrypt::Easy;
 use IRC::Publisher::Auth;
 
@@ -14,9 +16,12 @@ is_deeply $auth->policy->unbless, [ -blacklist, -passwd ],
 is_deeply $auth->accounts->keys->unbless, [],
   '->accounts empty by default';
 # ->add_account
-my $pwd = bcrypt->crypt('foo');
+my $pwd = bcrypt->crypt(PASSWD);
 $auth->add_account( foo => $pwd );
-ok $auth->check('1.2.3.4', foo => $pwd), '->check 1.2.3.4 + passwd';
+my $ret = $auth->check('1.2.3.4', foo => PASSWD);
+ok $ret->allowed, '->check->allowed (1.2.3.4 + passwd)';
+cmp_ok $ret->message, 'eq', 'allow', '->check->message (1.2.3.4 + passwd)'
+  or diag explain $ret;
 # ->del_account
 # ->account_names
 # FIXME
