@@ -1,6 +1,12 @@
--- abstract out ::Transport layer ?
-  -- drop zeromq, replace with a POEx::IRC::Backend
-    -- speak <TYPE> <JSON>
-     'IRC <JSON>' for IRC events
-     'CMD <JSON>' for Publisher events
+-- drop zeromq, replace with a POEx::IRC::Backend
+* Listen + Publish
+  -- AUTH handshake
+  -- use Line + JSON filter stack for ->pub Backend
+  -- $p->publish shoves all args in ARRAY
+  -- [ TYPE => ARRAY ]
+       [ IRC => [ $ircalias => $ircmsg_hash ] ]
+       [ PUB => [ $event => @params ] ]
 
+* Connect + Send
+  -- track outgoing Connects by alias
+  -- 
