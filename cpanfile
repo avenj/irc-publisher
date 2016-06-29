@@ -11,6 +11,7 @@ requires "Try::Tiny"          => "0";
 
 requires "POEx::IRC::Backend" => "0.026";
 
+requires "Net::CIDR::Set" => "0.13";
 
 on 'test'      => sub {
   requires "Test::More" => "0.88";
