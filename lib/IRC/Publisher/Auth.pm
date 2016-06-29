@@ -9,6 +9,8 @@ use List::Objects::WithUtils;
 use List::Objects::Types  -types;
 use Types::Standard       -types;
 
+use Net::CIDR::Set;
+
 use Moo;
 
 # TODO: pluggable auth backends
@@ -44,7 +46,7 @@ sub _trigger_policy {
 
 
 has accounts => (
-  # For -passwd auth policy; $account -> $bcrypt
+  # For -passwd auth policy; $account -> $crypted (bcrypt/sha/md5)
   is        => 'ro',
   isa       => HashObj,
   coerce    => 1,
@@ -74,7 +76,9 @@ sub del_account {
   $self
 }
 
-
+# FIXME
+#  turn _addr_blacklist and _addr_whitelist into Net::CIDR::Set objects
+#  proxy methods to Net::CIDR::Set
 has _addr_blacklist => (
   is        => 'ro',
   isa       => HashObj,
@@ -104,8 +108,9 @@ sub unblacklist {
 
 sub is_blacklisted {
   my ($self, $addr) = @_;
+  # FIXME range matching module?
   confess "->is_blacklisted expected an address" unless defined $addr;
-  $self->_addr_blacklist->exists($addr)
+  # FIXME
 }
 
 
@@ -134,6 +139,7 @@ sub unwhitelist {
 
 sub is_whitelisted {
   my ($self, $addr) = @_;
+  # FIXME range match...?
   confess "->is_whitelisted expected an address" unless defined $addr;
   $self->_addr_whitelist->exists($addr)
 }
