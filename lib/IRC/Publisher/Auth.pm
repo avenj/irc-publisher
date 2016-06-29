@@ -177,11 +177,11 @@ sub _check_blacklist {
 }
 
 sub _check_passwd {
-  my ($self, undef, $acct, $crypted) = @_;
-  return [0, 'bad params'] unless defined $acct and $crypted;
+  my ($self, undef, $acct, $passwd) = @_;
+  return [0, 'bad params'] unless defined $acct and defined $passwd;
   return [0, 'unknown account'] unless $self->accounts->exists($acct);
-  my $passwd = $self->accounts->get($acct);
-  return [1, 'allow'] if passwdcmp $passwd => $crypted;
+  my $crypt = $self->accounts->get($acct);
+  return [1, 'allow'] if passwdcmp $passwd => $crypt;
   [0, 'bad passwd']
 }
 
