@@ -31,25 +31,32 @@ ok !$ret->allowed, '->check->allowed negative (bad passwd)';
 $auth->add_account( bar => $pwd );
 is_deeply $auth->account_names->sort->unbless, [ 'bar', 'foo' ],
   'account_names';
-$ret = $auth->check('1234', bar => PASSWD);
+$ret = $auth->check('1.2.3.4', bar => PASSWD);
 ok $ret->allowed, '->check->allowed (after add_account)';
 
 # ->del_account
 ok $auth->del_account( 'bar' ), 'del_account';
 is_deeply $auth->account_names->unbless, ['foo'],
   'account_names after del_account';
-$ret = $auth->check('1234', bar => PASSWD);
+$ret = $auth->check('1.2.3.4', bar => PASSWD);
 ok !$ret->allowed, '->check->allowed negative (after del_account)';
 
-# ->blacklist
-# ->is_blacklisted
+# ->blacklist / is_blacklisted
+ok !$auth->is_blacklisted('127.0.0.1'), 'negative is_blacklisted (empty bl)';
+$auth->blacklist('127.0.0.1', '192.168.0.1/16');
+ok $auth->is_blacklisted('127.0.0.1'), 'is_blacklisted (single)';
+ok $auth->is_blacklisted('192.168.0.3'), 'is_blacklisted (range)';
+ok !$auth->is_blacklisted('200.0.0.1'), 'negative is_blacklisted';
 # ->unblacklist
+$auth->unblacklist('127.0.0.1');
+ok !$auth->is_blacklisted('127.0.0.1'), 'is_blacklisted after unblacklist';
+ok $auth->is_blacklisted('192.168.0.4'), 
+  'negative is_blacklisted after unblacklist';
 # ->get_blacklist
 # FIXME
 # FIXME explicit test for blacklisted but passwd ok on ->check
 
-# ->whitelist ( FIXME enable whitelist policy )
-# ->is_whitelisted
+# ->whitelist ( FIXME enable whitelist policy ) / ->is_whitelisted
 # ->unwhitelist
 # ->get_whitelist
 # FIXME
