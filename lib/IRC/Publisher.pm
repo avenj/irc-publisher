@@ -64,6 +64,9 @@ has irc => (
 );
 
 # FIXME set up ->pub POEx::IRC::Backend
+# FIXME use line filter only and speak straight JSON pub-side?
+#  (or line + JSON filter)
+#  FIXME protocol doc
 
 has json => (
   lazy        => 1,
@@ -175,6 +178,9 @@ sub send {
 sub publish {
   my ($self, $prefix, @parts) = @_;
   # FIXME ->send to all seen ->pub Connects
+  # FIXME JSONify ? unless we have a JSON filter..
+  # FIXME enforce refs-only ?
+  # Reset ping timer
   $poe_kernel->post( $self->session_id, '_pub_ping_timer' );
 }
 
@@ -203,11 +209,14 @@ sub connect {
     ipv6  => $params{ipv6},
     # FIXME bindaddr, configurable irc_from_addr attr
   );
+  # FIXME publish event indicating we're connecting out
 }
 
 sub disconnect {
   my ($self, $alias) = @_;
   my $conn = $self->_alias->get($alias) || confess "No such alias '$alias'";
+  # FIXME publish event indicating we're disconnecting
+  #  (and a confirmation event when we get ircsock_disconnect)
   $self->irc->disconnect($conn->wheel_id, 'Disconnecting');
 }
 
@@ -223,13 +232,20 @@ sub _ircsock_disconnect {
 }
 
 sub _ircsock_input {
-  my ($kernel, $self) = @_[KERNEL, OBJECT];
+  my ($kernel, $sender, $self) = @_[KERNEL, SENDER, OBJECT];
   my ($conn, $msg) = @_[ARG0 .. $#_];
 
-  # FIXME dispatch based on $_[SENDER], may be from irc or pub
-  # FIXME irc-side dispatch should suss out what $alias this connect belongs to
-  #   (attach metadata to Connect objs in irc_connected ?)
+  if ($sender == $self->pub->session_id) {
+    # FIXME incoming from pub-side, dispatch to cmd handler
+  } elsif ($sender == $self->irc->session_id) {
+    # FIXME incoming from IRC-side, publish ircmsg
+    # FIXME ircmsg dispatch should suss out which $alias this $conn belongs to
+    #       (attach metadata to $conn->args)
+  } else {
+    confess "BUG; _ircsock_input from unknown session ID '$sender'"
+  }
 
+  # FIXME ping response handler for both irc-side and pub-side
   if ($self->handle_irc_ping && lc $msg->command eq 'ping') {
     $self->send(
       ircmsg(
@@ -241,6 +257,7 @@ sub _ircsock_input {
     return
   }
 
+  # FIXME kill ->
   $self->publish( ircmsg => $self->json->encode($msg) );
 }
 
@@ -353,7 +370,7 @@ sub _cmd_ping {
 
 =head1 NAME
 
-IRC::Publisher - Bridge IRC and ZeroMQ to build extensible clients or servers
+IRC::Publisher - A distributed approach to IRC applications
 
 =head1 SYNOPSIS
 
@@ -364,11 +381,6 @@ FIXME
 This module provides a way to build IRC clients or servers composed of
 discrete components potentially implemented in (m)any languages (and possibly
 distributed across a network, etc). 
-
-The C<IRC::Publisher> object encapsulates a L<POE::Session> that manages a
-L<POEx::IRC::Backend> tied into a pair of L<POEx::ZMQ> sockets; a C<ZMQ_PUB>
-socket for publishing status or IRC traffic, and a C<ZMQ_ROUTER> socket for
-accepting commands from remote clients.
 
 There is no state-tracking and very little IRC protocol negotiation; the
 intention is for a higher-level layer to handle the details of communication
