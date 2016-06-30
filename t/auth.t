@@ -111,4 +111,9 @@ like $auth->get_whitelist->get(0), qr/192.168/,
 #    * addr not blacklisted, good passwd, not whitelisted  -> deny
 #    * addr not blacklisted, bad passwd, whitelisted -> deny
 
+eval {; $auth->set_policy(1) };
+like $@, qr/ImmutableArray/, 'set_policy for bad type dies';
+eval {; $auth->set_policy([-foo]) };
+like $@, qr/known policy/, 'set_policy for unknown policy dies';
+
 done_testing
