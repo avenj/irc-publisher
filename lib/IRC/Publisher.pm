@@ -247,30 +247,41 @@ sub _ircsock_disconnect {
   $self->publish( ircstatus => disconnected => $alias );
 }
 
+sub INPUT_FROM_IRC () { 0 }
+sub INPUT_FROM_PUB () { 1 }
+
 sub _ircsock_input {
   my ($kernel, $sender, $self) = @_[KERNEL, SENDER, OBJECT];
   my ($conn, $msg) = @_[ARG0 .. $#_];
 
+  my $from = 
+      $sender == $self->pub->session_id ? INPUT_FROM_PUB
+    : $sender == $self->irc->session_id ? INPUT_FROM_IRC
+    : confess "BUG; _ircsock_input from unknown session ID '$sender'"
+  ;
+
   # Ping response handler for both sides; returns params as-is
-  if ($self->handle_irc_ping && lc $msg->command eq 'ping') {
-    $self->post( $sender, send =>
-      ircmsg(
-        command => 'pong',
-        params  => [ @{ $msg->params } ],
-      ),
-      $conn
-    );
-    return 1
+  if (lc $msg->command eq 'ping') {
+    HANDLE_PING: {
+      last HANDLE_PING 
+        if $from == INPUT_FROM_IRC and not $self->handle_irc_ping;
+      $self->post( $sender, send =>
+        ircmsg(
+          command => 'pong',
+          params  => [ @{ $msg->params } ],
+        ),
+        $conn
+      );
+      return 1
+    } # HANDLE_PING
   }
 
-  if ($sender == $self->pub->session_id) {
+  if ($from == INPUT_FROM_PUB) {
     # FIXME incoming from pub-side, dispatch to cmd handler
-  } elsif ($sender == $self->irc->session_id) {
+  } elsif ($from == INPUT_FROM_IRC) {
     # FIXME incoming from IRC-side, publish ircmsg
     # FIXME ircmsg dispatch should suss out which $alias this $conn belongs to
     #       (attach metadata to $conn->args)
-  } else {
-    confess "BUG; _ircsock_input from unknown session ID '$sender'"
   }
 
 }
