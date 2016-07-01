@@ -1,5 +1,12 @@
 package IRC::Publisher;
 
+
+# FIXME consider turning me into an Emitter ?
+# - pros
+#  pluggability & filtering options before hitting subscribers
+# - cons
+#  encourages Doing Too Much in Publisher
+
 use Carp;
 use strictures 2;
 
@@ -132,7 +139,14 @@ sub _start {
   $kernel->post( $self->pub->session_id => 'register' );
   $kernel->post( $self->irc->session_id => 'register' );
 
-  # FIXME set up ->pub listeners
+  $self->pub->create_listener(
+    # FIXME optional ipv6
+    # FIXME optional ssl, default-on
+    
+    bindaddr => $self->publish_on_addr,
+    port     => $self->publish_on_port,
+    idle     => $self->pub_ping_delay,
+  );
 
   # Start PUB ping timer ->
   $kernel->yield( '_pub_ping_timer' );
