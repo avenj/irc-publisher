@@ -191,9 +191,11 @@ sub send {
 
 sub publish {
   my ($self, $prefix, @parts) = @_;
-  # FIXME ->send to all seen ->pub Connects
-  # FIXME JSONify ? unless we have a JSON filter..
+
+  # FIXME ->send to all seen ->pub Connects  (tracked in attr ?)
+  # FIXME JSONify 
   # FIXME enforce refs-only ?
+
   # Reset ping timer
   $poe_kernel->post( $self->session_id, '_pub_ping_timer' );
 }
@@ -249,6 +251,18 @@ sub _ircsock_input {
   my ($kernel, $sender, $self) = @_[KERNEL, SENDER, OBJECT];
   my ($conn, $msg) = @_[ARG0 .. $#_];
 
+  # Ping response handler for both sides; returns params as-is
+  if ($self->handle_irc_ping && lc $msg->command eq 'ping') {
+    $self->post( $sender, send =>
+      ircmsg(
+        command => 'pong',
+        params  => [ @{ $msg->params } ],
+      ),
+      $conn
+    );
+    return 1
+  }
+
   if ($sender == $self->pub->session_id) {
     # FIXME incoming from pub-side, dispatch to cmd handler
   } elsif ($sender == $self->irc->session_id) {
@@ -259,20 +273,6 @@ sub _ircsock_input {
     confess "BUG; _ircsock_input from unknown session ID '$sender'"
   }
 
-  # FIXME ping response handler for both irc-side and pub-side
-  if ($self->handle_irc_ping && lc $msg->command eq 'ping') {
-    $self->send(
-      ircmsg(
-        command => 'pong',
-        params  => [ @{ $msg->params } ],
-      ),
-      $conn
-    );
-    return
-  }
-
-  # FIXME kill ->
-  $self->publish( ircmsg => $self->json->encode($msg) );
 }
 
 # FIXME handle:
