@@ -276,14 +276,18 @@ sub _ircsock_input {
     } # HANDLE_PING
   }
 
-  if ($from == INPUT_FROM_PUB) {
-    # FIXME incoming from pub-side, dispatch to cmd handler
-  } elsif ($from == INPUT_FROM_IRC) {
-    # FIXME incoming from IRC-side, publish ircmsg
-    # FIXME ircmsg dispatch should suss out which $alias this $conn belongs to
-    #       (attach metadata to $conn->args)
-  }
+  my $meth = $from == INPUT_FROM_PUB ? '_input_from_pub' : 'input_from_irc' ;
+  $self->$meth($conn, $msg)
+}
 
+sub _input_from_pub {
+  my ($self, $conn, $msg) = @_;
+  # FIXME cmd dispatch, results sent back to $conn via ->pub backend
+}
+
+sub _input_from_irc {
+  # FIXME get $alias for this $conn ($conn->args metadata?), 
+  #       publish ircmsg
 }
 
 # FIXME handle:
